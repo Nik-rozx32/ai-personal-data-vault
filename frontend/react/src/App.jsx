@@ -9,9 +9,12 @@ import { ActivityAlerts } from './components/ActivityAlerts';
 import { AddSourceModal } from './components/AddSourceModal';
 import { StorageOptimizerModal } from './components/StorageOptimizerModal';
 import { CommandPalette } from './components/CommandPalette';
+import { AuthPage } from './components/auth/AuthPage';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Plus, ArrowLeft, Folder, Sparkles, Database, Bookmark, Trash2, Users } from 'lucide-react';
 
-export function App() {
+function MainVaultApp() {
+  const { currentUser, isAuthenticated } = useAuth();
   const [activeNav, setActiveNav] = useState('Dashboard');
   const [theme, setTheme] = useState('light');
   const [isAddSourceOpen, setIsAddSourceOpen] = useState(false);
@@ -38,6 +41,21 @@ export function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
+  // If user is not authenticated or explicitly clicks Auth navigation, show Auth page
+  if (!isAuthenticated || activeNav === 'Auth') {
+    return (
+      <AuthPage
+        initialMode="login"
+        theme={theme}
+        toggleTheme={toggleTheme}
+        onSuccess={() => setActiveNav('Dashboard')}
+        onBackToApp={isAuthenticated ? () => setActiveNav('Dashboard') : null}
+      />
+    );
+  }
+
+  const userFirstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'User';
+
   return (
     <div style={{
       display: 'flex',
@@ -51,6 +69,7 @@ export function App() {
         setActiveNav={setActiveNav}
         onOpenOptimizer={() => setIsOptimizerOpen(true)}
         onOpenSearch={() => setIsSearchOpen(true)}
+        onOpenAuth={() => setActiveNav('Auth')}
       />
 
       {/* Main App Container */}
@@ -69,6 +88,7 @@ export function App() {
           theme={theme}
           toggleTheme={toggleTheme}
           onOpenNotifications={() => {}}
+          onOpenAuth={() => setActiveNav('Auth')}
         />
 
         {/* Main Content Body */}
@@ -106,7 +126,7 @@ export function App() {
                     marginTop: '4px',
                     marginBottom: 0
                   }}>
-                    Welcome back, John! 👋
+                    Welcome back, {userFirstName}! 👋
                   </p>
                 </div>
 
@@ -270,9 +290,18 @@ export function App() {
         onSelectAction={(item) => {
           if (item.category === 'Tool') setIsOptimizerOpen(true);
           if (item.category === 'Source') setActiveNav('Sources');
+          if (item.category === 'Auth') setActiveNav('Auth');
         }}
       />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <MainVaultApp />
+    </AuthProvider>
   );
 }
 

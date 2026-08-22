@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Home, 
   Folder, 
@@ -10,16 +10,24 @@ import {
   Trash2, 
   TrendingUp, 
   ChevronDown,
-  User
+  User,
+  LogOut,
+  KeyRound,
+  Shield
 } from 'lucide-react';
-import { DataVaultShieldLogo } from './BrandIcons';
+import { DataVaultShieldLogo, GoogleIcon } from './BrandIcons';
+import { useAuth } from '../context/AuthContext';
 
 export const Sidebar = ({ 
   activeNav = 'Dashboard', 
   setActiveNav, 
   onOpenOptimizer, 
-  onOpenSearch 
+  onOpenSearch,
+  onOpenAuth
 }) => {
+  const { currentUser, logout, isAuthenticated } = useAuth();
+  const [showUserPopover, setShowUserPopover] = useState(false);
+
   const navItems = [
     { id: 'Dashboard', label: 'Dashboard', icon: Home },
     { id: 'All Files', label: 'All Files', icon: Folder },
@@ -30,6 +38,15 @@ export const Sidebar = ({
     { id: 'Shared', label: 'Shared', icon: Users },
     { id: 'Trash', label: 'Trash', icon: Trash2 },
   ];
+
+  const userInitials = currentUser?.name
+    ? currentUser.name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    : 'DV';
 
   return (
     <aside style={{
@@ -48,12 +65,16 @@ export const Sidebar = ({
       overflowY: 'auto'
     }}>
       {/* Brand Header */}
-      <div style={{
-        padding: '24px 20px 20px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px'
-      }}>
+      <div 
+        onClick={() => setActiveNav && setActiveNav('Dashboard')}
+        style={{
+          padding: '24px 20px 20px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          cursor: 'pointer'
+        }}
+      >
         <DataVaultShieldLogo size={38} />
         <div>
           <h1 style={{
@@ -132,6 +153,40 @@ export const Sidebar = ({
             </button>
           );
         })}
+
+        {/* Auth / Account Nav Item */}
+        <button
+          onClick={onOpenAuth}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            width: '100%',
+            padding: '10px 14px',
+            borderRadius: '10px',
+            fontSize: '14px',
+            fontWeight: activeNav === 'Auth' ? '600' : '500',
+            color: activeNav === 'Auth' ? '#ffffff' : '#a5b4fc',
+            backgroundColor: activeNav === 'Auth' ? 'rgba(79, 70, 229, 0.25)' : 'rgba(99, 102, 241, 0.08)',
+            border: '1px solid rgba(99, 102, 241, 0.2)',
+            marginTop: '8px',
+            textAlign: 'left',
+            transition: 'all 0.18s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)';
+            e.currentTarget.style.color = '#ffffff';
+          }}
+          onMouseLeave={(e) => {
+            if (activeNav !== 'Auth') {
+              e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.08)';
+              e.currentTarget.style.color = '#a5b4fc';
+            }
+          }}
+        >
+          <KeyRound size={17} style={{ color: '#818cf8' }} />
+          <span>{isAuthenticated ? 'Account & Auth' : 'Sign In / Register'}</span>
+        </button>
       </nav>
 
       {/* Bottom Section: Storage Summary & User Profile */}
@@ -140,7 +195,8 @@ export const Sidebar = ({
         display: 'flex',
         flexDirection: 'column',
         gap: '16px',
-        borderTop: '1px solid #161e32'
+        borderTop: '1px solid #161e32',
+        position: 'relative'
       }}>
         {/* Storage Summary Box */}
         <div style={{
@@ -175,7 +231,10 @@ export const Sidebar = ({
             color: '#ffffff',
             marginBottom: '10px'
           }}>
-            245.6 GB <span style={{ color: '#64748b', fontWeight: '400' }}>/ 1 TB (24%)</span>
+            {currentUser?.storageUsed || '245.6 GB'}{' '}
+            <span style={{ color: '#64748b', fontWeight: '400' }}>
+              / {currentUser?.storageTotal || '1 TB'}
+            </span>
           </div>
 
           {/* Progress Bar */}
@@ -230,54 +289,165 @@ export const Sidebar = ({
         </div>
 
         {/* User Card */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '8px 6px',
-          borderRadius: '10px',
-          cursor: 'pointer',
-          transition: 'background-color 0.2s ease'
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
-        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            backgroundColor: '#3b82f6',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff',
-            flexShrink: 0
-          }}>
-            <User size={20} />
+        {isAuthenticated && currentUser ? (
+          <div style={{ position: 'relative' }}>
+            <div 
+              onClick={() => setShowUserPopover(!showUserPopover)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '8px 6px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease',
+                backgroundColor: showUserPopover ? 'rgba(255, 255, 255, 0.08)' : 'transparent'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+              onMouseLeave={(e) => {
+                if (!showUserPopover) e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              {currentUser.avatar ? (
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    flexShrink: 0
+                  }}
+                />
+              ) : (
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  backgroundColor: '#3b82f6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  fontSize: '13px',
+                  flexShrink: 0
+                }}>
+                  {userInitials}
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: '#ffffff',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {currentUser.name}
+                </div>
+                <div style={{
+                  fontSize: '11px',
+                  color: '#64748b',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {currentUser.email}
+                </div>
+              </div>
+              <ChevronDown size={16} style={{ color: '#64748b', transform: showUserPopover ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+            </div>
+
+            {/* User Popover Menu */}
+            {showUserPopover && (
+              <div style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: '0',
+                width: '100%',
+                marginBottom: '8px',
+                backgroundColor: '#11172a',
+                border: '1px solid #1e293b',
+                borderRadius: '12px',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                padding: '8px',
+                zIndex: 60,
+                animation: 'fadeIn 0.15s ease'
+              }}>
+                <button
+                  onClick={() => {
+                    setShowUserPopover(false);
+                    if (onOpenAuth) onOpenAuth();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    color: '#e2e8f0',
+                    textAlign: 'left'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <KeyRound size={14} style={{ color: '#818cf8' }} />
+                  <span>Switch User / Auth</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowUserPopover(false);
+                    logout();
+                    if (onOpenAuth) onOpenAuth();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    color: '#f87171',
+                    textAlign: 'left',
+                    marginTop: '2px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.12)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <LogOut size={14} />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            )}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
+        ) : (
+          <button
+            onClick={onOpenAuth}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              backgroundColor: '#4f46e5',
+              color: '#ffffff',
               fontSize: '13px',
               fontWeight: '600',
-              color: '#ffffff',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              John Doe
-            </div>
-            <div style={{
-              fontSize: '11px',
-              color: '#64748b',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              john.doe@email.com
-            </div>
-          </div>
-          <ChevronDown size={16} style={{ color: '#64748b' }} />
-        </div>
+              boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)'
+            }}
+          >
+            <User size={16} />
+            <span>Sign In / Register</span>
+          </button>
+        )}
       </div>
     </aside>
   );
