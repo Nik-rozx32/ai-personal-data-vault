@@ -1,0 +1,30 @@
+# Build directories
+build/
+cmake-build-*/
+bin/
+out/
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# Compiled binaries and objects
+*.exe
+*.obj
+*.o
+*.dll
+*.so
+*.dylib
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# Generated chunk output files (preserve chunks directory via .gitkeep)
+chunks/*
+!chunks/.gitkeep
+
+# Test artifacts and temporary files
+tests/test_output/
+tests/temp_*
