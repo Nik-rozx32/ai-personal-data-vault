@@ -1,15 +1,16 @@
 #ifndef CHUNKER_H
 #define CHUNKER_H
 
+#include "Manifest.h"
+#include "NodeManager.h"
+
 #include <string>
 #include <cstddef>
+#include <vector>
 
 /**
- * @brief Chunker class responsible for splitting files into fixed-size binary chunks.
- *
- * This forms Phase 1 of the AI-Powered Personal Data Vault storage engine.
- * Files are read sequentially in fixed-size buffers and saved as separate chunk files
- * without loading the entire file into memory.
+ * @brief Chunker class responsible for streaming files into fixed-size binary chunks
+ * and distributing them across storage nodes with replication.
  */
 class Chunker {
 private:
@@ -20,12 +21,13 @@ private:
 public:
     // Default chunk size is 1 MB (1024 * 1024 bytes = 1,048,576 bytes)
     static constexpr std::size_t DEFAULT_CHUNK_SIZE = 1024 * 1024;
+    static constexpr std::size_t DEFAULT_REPLICATION_FACTOR = 2;
 
     /**
      * @brief Constructs a new Chunker object.
      *
      * @param inputFile Path to the input file to split.
-     * @param outputDirectory Directory where chunks will be written (default: "chunks").
+     * @param outputDirectory Directory for legacy chunk output (default: "chunks").
      * @param chunkSize Size of each chunk in bytes (default: 1 MB).
      */
     Chunker(
@@ -35,13 +37,23 @@ public:
     );
 
     /**
-     * @brief Performs the splitting of the input file into chunks.
-     *
-     * Reads the file in binary mode, creates output directories if needed,
-     * writes individual chunks (chunk_0000, chunk_0001, etc.), and prints
-     * real-time progress and a final summary.
+     * @brief Performs standard chunking to a single output directory (Phase 1 mode).
      */
     void split();
+
+    /**
+     * @brief Chunks the file and replicates chunks across multiple storage nodes via NodeManager.
+     * 
+     * @param nodeManager The node manager managing the target storage cluster.
+     * @param replicationFactor Number of copies to create for each chunk across nodes (default: 2).
+     * @param manifestOutputPath Optional file path where JSON manifest will be written.
+     * @return FileManifest Generated metadata manifest for the stored file.
+     */
+    FileManifest splitToNodes(
+        NodeManager& nodeManager,
+        std::size_t replicationFactor = DEFAULT_REPLICATION_FACTOR,
+        const std::string& manifestOutputPath = ""
+    );
 };
 
 #endif // CHUNKER_H
