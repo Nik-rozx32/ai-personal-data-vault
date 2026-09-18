@@ -2,58 +2,58 @@
 
 Welcome to the **Storage Engine** module of the **AI-Powered Personal Data Vault**.
 
-This component is written in modern **C++17** and serves as the low-level data storage foundation.
+This component is written in modern **C++17** and serves as the high-performance distributed data storage foundation for the vault.
 
 ---
 
-## 1. What the Storage Engine Does (Phase 1)
+## 1. What the Storage Engine Does
 
-In **Phase 1**, the storage engine provides high-performance binary file chunking:
-- Takes any arbitrary file format (PDF, JPG, PNG, MP4, ZIP, TXT, etc.).
-- Streams the file in fixed-size memory buffers (default **1 MB**).
-- Splits the file into standalone binary chunks: `chunk_0000`, `chunk_0001`, `chunk_0002`, ...
-- Preserves 100% of the original file bytes without loading large files into RAM.
-- Automatically creates the output directory (`chunks/`) if it does not already exist.
-
----
-
-## 2. Why File Chunking is Essential for a Personal Data Vault
-
-When building a distributed, encrypted personal data vault:
-1. **Memory Efficiency**: Large files (such as 4K videos or database backups) can be processed without exhausting system RAM.
-2. **Distributed Storage**: Chunks can later be distributed across different storage nodes, cloud providers, or drives.
-3. **Resilience & Fault Tolerance**: If a transfer fails or a node goes offline, only the affected chunk needs to be retransmitted or retrieved from a replica rather than the entire multi-gigabyte file.
-4. **Deduplication & Encryption**: Granular chunking enables content-addressable storage (CAS) and chunk-level encryption in upcoming phases.
+The storage engine provides distributed chunking, multi-node replication, and fault-tolerant file reassembly:
+- **Binary Stream Chunking**: Takes any file format (PDF, JPG, PNG, MP4, ZIP, TXT, etc.) and streams it in fixed-size buffers (default **1 MB**).
+- **Multi-Node Replication**: Distributes and replicates binary chunks across a configurable cluster of storage nodes (`node_1`, `node_2`, `node_3`, ...) with a configurable replication factor ($R \ge 1$).
+- **JSON Manifest Generation**: Emits a structured JSON manifest tracking file metadata and exact chunk-to-node placements for Spring Boot and UI clients.
+- **Fault-Tolerant Reassembly (`restore`)**: Reconstructs the original file byte-for-byte from distributed nodes with automatic failover to replica nodes if a node or chunk is missing.
+- **Spring Boot Ready**: Provides `--json` flags on all operations for direct process integration or REST API wrapping.
 
 ---
 
-## 3. Project Structure
+## 2. Project Structure
 
 ```
 storage-engine/
 │
 ├── include/
-│   └── Chunker.h           # Class declaration and public API
+│   ├── Chunker.h           # Stream chunking API
+│   ├── NodeManager.h       # Node cluster management, replication, and failover
+│   └── Manifest.h          # JSON Metadata Manifest model and serializer
 │
 ├── src/
-│   ├── Chunker.cpp         # Binary streaming & chunking implementation
-│   └── main.cpp            # Command-line interface & argument parser
+│   ├── Chunker.cpp         # Binary streaming & multi-node pipeline
+│   ├── NodeManager.cpp     # Storage nodes & replica failover implementation
+│   ├── Manifest.cpp        # JSON parser and serializer (zero external dependencies)
+│   └── main.cpp            # Command-line interface supporting store, restore, status
 │
-├── chunks/                 # Output folder for generated chunk files
-│   └── .gitkeep
+├── nodes/                  # Storage cluster node directories
+│   ├── node_1/
+│   ├── node_2/
+│   └── node_3/
 │
-├── tests/                  # Automated and manual testing suite
-│   ├── README.md           # Testing instructions & test matrix
-│   └── run_tests.ps1       # Automated PowerShell test runner
+├── metadata/               # JSON manifests consumable by Spring Boot
+│   └── manifests/
+│
+├── chunks/                 # Output folder for legacy single-directory chunking
+│
+├── tests/                  # Automated PowerShell test suite
+│   ├── README.md
+│   └── run_tests.ps1       # Comprehensive 8-test validation suite
 │
 ├── CMakeLists.txt          # CMake build configuration (C++17)
-├── README.md               # Documentation & usage guide
-└── .gitignore              # Ignores build outputs and chunk files
+└── README.md               # Documentation & usage guide
 ```
 
 ---
 
-## 4. How to Build Using CMake
+## 3. How to Build Using CMake
 
 ### Prerequisites
 - CMake 3.20 or newer
@@ -61,87 +61,102 @@ storage-engine/
 
 ### Build Steps
 
-1. Navigate to the `storage-engine/` directory:
-   ```bash
-   cd storage-engine
-   ```
+```bash
+cd storage-engine
+cmake -B build -S .
+cmake --build build --config Release
+```
 
-2. Create a build directory and configure CMake:
-   ```bash
-   cmake -B build -S .
-   ```
-
-3. Compile the project:
-   ```bash
-   cmake --build build --config Release
-   ```
-
-The compiled executable `storage_engine` (or `storage_engine.exe` on Windows) will be placed in `build/` (or `build/Release/`).
+The compiled binary `storage_engine.exe` will be located in `build/Release/`.
 
 ---
 
-## 5. How to Run the Program
+## 4. CLI Commands & Usage
 
-### Command Syntax
+### A. Store & Replicate a File (`store`)
 ```bash
-storage_engine <input_file> [chunk_size_in_bytes]
+./build/Release/storage_engine store <input_file> [options]
 ```
 
-- `<input_file>`: Path to the target file to be chunked (required).
-- `[chunk_size_in_bytes]`: Optional chunk size in bytes. Default is **1,048,576 bytes** (1 MB).
+**Options:**
+- `--chunk-size <bytes>`: Size of each chunk in bytes (default: `1048576` [1 MB]).
+- `--replicas <count>`: Number of node replicas per chunk (default: `2`).
+- `--node-count <count>`: Number of nodes in the cluster (default: `3`).
+- `--nodes-dir <path>`: Base directory for node storage (default: `nodes`).
+- `--manifest <path>`: Destination path for the metadata JSON file.
+- `--json`: Outputs JSON manifest to standard output (for Spring Boot integration).
 
----
-
-## 6. Example Commands
-
-### Default 1 MB Chunks
+**Example:**
 ```bash
-./build/Release/storage_engine sample.pdf
-```
-
-### Custom Chunk Size (e.g., 512 KB = 524,288 bytes)
-```bash
-./build/Release/storage_engine archive.zip 524288
-```
-
-### Custom Chunk Size (e.g., 64 KB = 65,536 bytes)
-```bash
-./build/Release/storage_engine notes.txt 65536
+./build/Release/storage_engine store my_document.pdf --replicas 2 --chunk-size 1048576
 ```
 
 ---
 
-## 7. Example Output
+### B. Restore a File from Nodes (`restore`)
+```bash
+./build/Release/storage_engine restore <manifest_json_path> <output_file> [--nodes-dir <path>]
+```
 
-```text
-Starting chunking process...
-Input File       : sample.pdf
-Output Directory : chunks
-Chunk Size       : 1048576 bytes (1.00 MB)
---------------------------------------------------
-  [+] Created chunk_0000 (1048576 bytes) -> chunks/chunk_0000
-  [+] Created chunk_0001 (1048576 bytes) -> chunks/chunk_0001
-  [+] Created chunk_0002 (450123 bytes) -> chunks/chunk_0002
---------------------------------------------------
-Chunking completed successfully!
-Original File Path : sample.pdf
-Chunks Created     : 3
-Total Bytes        : 2547275 bytes
-Configured Size    : 1048576 bytes per chunk
-==================================================
+**Example:**
+```bash
+./build/Release/storage_engine restore metadata/manifests/vault_my_document_178970.json restored_doc.pdf
 ```
 
 ---
 
-## 8. Current Limitations (Phase 1 Scope)
+### C. Check Cluster Node Status (`status`)
+```bash
+# Human readable table
+./build/Release/storage_engine status
 
-> [!NOTE]
-> This is **Phase 1: Basic File Chunking Engine**.
+# JSON schema for Spring Boot backend
+./build/Release/storage_engine status --json
+```
 
-The following capabilities are deliberately **not included** in Phase 1 and will be introduced in subsequent phases:
-- File reassembly (merging chunks back to the original file)
-- SHA-256 cryptographic chunk hashing
-- Chunk corruption detection & verification
-- Data replication across multiple storage nodes
-- Distributed networking / RPC layer
-- Spring Boot backend integration
+**JSON Output Example (Spring Boot):**
+```json
+{
+  "nodes": [
+    {
+      "id": "node_1",
+      "path": "nodes/node_1",
+      "isHealthy": true,
+      "chunkCount": 3,
+      "totalBytes": 25000
+    },
+    {
+      "id": "node_2",
+      "path": "nodes/node_2",
+      "isHealthy": true,
+      "chunkCount": 3,
+      "totalBytes": 25000
+    },
+    {
+      "id": "node_3",
+      "path": "nodes/node_3",
+      "isHealthy": true,
+      "chunkCount": 2,
+      "totalBytes": 16808
+    }
+  ]
+}
+```
+
+---
+
+## 5. Running Automated Tests
+
+Run the full automated test suite with PowerShell:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tests\run_tests.ps1
+```
+Tests cover:
+1. Small file chunking (< 1 MB)
+2. Exact 1 MB boundary chunking
+3. Large file multi-chunking (> 1 MB)
+4. Multi-node chunk distribution & 2x replication
+5. File restore & SHA-256 binary parity validation
+6. Replica failover recovery (automatic self-healing when a primary chunk is lost)
+7. Node status JSON schema verification
+8. Missing file error handling

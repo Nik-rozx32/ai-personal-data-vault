@@ -11,4 +11,6 @@ include_directories(include)
 add_executable(storage_engine
     src/main.cpp
     src/Chunker.cpp
+    src/NodeManager.cpp
+    src/Manifest.cpp
 )
