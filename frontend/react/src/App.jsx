@@ -8,16 +8,18 @@ import { RecentFiles } from './components/RecentFiles';
 import { ActivityAlerts } from './components/ActivityAlerts';
 import { AddSourceModal } from './components/AddSourceModal';
 import { StorageOptimizerModal } from './components/StorageOptimizerModal';
+import { FileUploadModal } from './components/FileUploadModal';
 import { CommandPalette } from './components/CommandPalette';
 import { AuthPage } from './components/auth/AuthPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Plus, ArrowLeft, Folder, Sparkles, Database, Bookmark, Trash2, Users } from 'lucide-react';
+import { Plus, Upload, ArrowLeft, Folder, Sparkles, Database, Bookmark, Trash2, Users } from 'lucide-react';
 
 function MainVaultApp() {
   const { currentUser, isAuthenticated } = useAuth();
   const [activeNav, setActiveNav] = useState('Dashboard');
   const [theme, setTheme] = useState('light');
   const [isAddSourceOpen, setIsAddSourceOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isOptimizerOpen, setIsOptimizerOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -130,33 +132,66 @@ function MainVaultApp() {
                   </p>
                 </div>
 
-                <button
-                  onClick={() => setIsAddSourceOpen(true)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '10px 18px',
-                    borderRadius: '10px',
-                    backgroundColor: '#4f46e5',
-                    color: '#ffffff',
-                    fontSize: '13.5px',
-                    fontWeight: '600',
-                    boxShadow: '0 4px 14px rgba(79, 70, 229, 0.35)',
-                    transition: 'all 0.18s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#4338ca';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#4f46e5';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  <Plus size={16} strokeWidth={2.5} />
-                  <span>Add Source</span>
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button
+                    onClick={() => setIsUploadOpen(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 18px',
+                      borderRadius: '10px',
+                      backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                      color: '#4f46e5',
+                      border: '1px solid rgba(79, 70, 229, 0.25)',
+                      fontSize: '13.5px',
+                      fontWeight: '600',
+                      transition: 'all 0.18s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.18)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <Upload size={16} strokeWidth={2.5} />
+                    <span>Upload & Chunk</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsAddSourceOpen(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 18px',
+                      borderRadius: '10px',
+                      backgroundColor: '#4f46e5',
+                      color: '#ffffff',
+                      fontSize: '13.5px',
+                      fontWeight: '600',
+                      border: 'none',
+                      boxShadow: '0 4px 14px rgba(79, 70, 229, 0.35)',
+                      transition: 'all 0.18s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#4338ca';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#4f46e5';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <Plus size={16} strokeWidth={2.5} />
+                    <span>Add Source</span>
+                  </button>
+                </div>
               </div>
 
               {/* 4 Top Metric Cards */}
@@ -275,6 +310,14 @@ function MainVaultApp() {
         onSourceAdded={(source) => {
           setIsAddSourceOpen(false);
           alert(`Successfully connected ${source.name}!`);
+        }}
+      />
+
+      <FileUploadModal
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        onUploadSuccess={(result) => {
+          console.log('[Upload Success]:', result);
         }}
       />
 
