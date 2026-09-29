@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { recordActivity } = require('../services/activityService');
 
 /**
  * Helper to generate JWT token for a given user ID and role
@@ -74,7 +75,15 @@ const register = async (req, res) => {
     // 5. Generate JWT token
     const token = generateToken(newUser._id, newUser.role);
 
-    // 6. Return safe response without password or passwordHash
+    // 6. Record USER_REGISTERED activity (fire-and-forget)
+    recordActivity({
+      userId: newUser._id,
+      action: 'USER_REGISTERED',
+      source: 'system',
+      metadata: { email: newUser.email }
+    });
+
+    // 7. Return safe response without password or passwordHash
     return res.status(201).json({
       message: 'User registered successfully',
       token,
@@ -132,7 +141,15 @@ const login = async (req, res) => {
     // 4. Generate JWT
     const token = generateToken(user._id, user.role);
 
-    // 5. Return JWT and safe user details
+    // 5. Record USER_LOGIN activity (fire-and-forget)
+    recordActivity({
+      userId: user._id,
+      action: 'USER_LOGIN',
+      source: 'system',
+      metadata: { email: user.email }
+    });
+
+    // 6. Return JWT and safe user details
     return res.status(200).json({
       message: 'Login successful',
       token,

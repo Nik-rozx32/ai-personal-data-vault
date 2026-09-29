@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { splitFileWithEngine } = require('../services/storageEngineService');
+const { recordActivity } = require('../services/activityService');
 
 // Base directory for chunks output
 const CHUNKS_BASE_DIR =
@@ -10,7 +11,7 @@ const CHUNKS_BASE_DIR =
 /**
  * @desc    Upload a file and split it into chunks using the C++ storage engine
  * @route   POST /api/files/chunk, POST /api/files/upload
- * @access  Public / Protected (Demo Friendly)
+ * @access  Private (JWT required — userId from token, never from body)
  */
 const uploadFile = async (req, res) => {
   let tempFilePath = null;
@@ -23,6 +24,9 @@ const uploadFile = async (req, res) => {
         message: 'No file selected. Please choose a file to upload and chunk.'
       });
     }
+
+    // User ID comes from the JWT via protect middleware — never from request body
+    const userId = req.user._id;
 
     tempFilePath = req.file.path;
     const originalFileName = req.file.originalname;
@@ -41,11 +45,11 @@ const uploadFile = async (req, res) => {
       chunkSize = parsedSize;
     }
 
-    // 3. Define target chunk directory for this file
+    // 3. Define target chunk directory scoped to this user + file
     const safeBaseName = path
       .basename(originalFileName, path.extname(originalFileName))
       .replace(/[^a-zA-Z0-9_-]/g, '_');
-    const folderName = `vault_${Date.now()}_${safeBaseName}`;
+    const folderName = `vault_${userId}_${Date.now()}_${safeBaseName}`;
     const targetChunkDir = path.join(CHUNKS_BASE_DIR, folderName);
 
     // 4. Call C++ Storage Engine
@@ -63,7 +67,21 @@ const uploadFile = async (req, res) => {
       tempFilePath = null;
     }
 
-    // 6. Return comprehensive structured response
+    // 6. Log FILE_UPLOADED activity (userId from JWT)
+    recordActivity({
+      userId,
+      action: 'FILE_UPLOADED',
+      source: 'local',
+      resourceName: originalFileName,
+      status: 'SUCCESS',
+      metadata: {
+        fileSize,
+        chunkCount,
+        chunkSize
+      }
+    });
+
+    // 7. Return comprehensive structured response (no filesystem paths exposed)
     return res.status(200).json({
       success: true,
       fileName: originalFileName,
@@ -71,14 +89,13 @@ const uploadFile = async (req, res) => {
       originalSize: fileSize,
       chunkSize: chunkSize,
       chunkCount: chunkCount,
-      outputDirectory: outputDirectory || targetChunkDir,
       chunks: chunks.map((c) => ({
         index: c.index,
         fileName: c.fileName || c.name,
         name: c.name || c.fileName,
         size: c.size,
-        path: c.path,
         status: c.status || 'Created'
+        // Note: c.path intentionally omitted from response to avoid exposing server paths
       })),
       engineStdout: engineStdout
     });
@@ -88,6 +105,18 @@ const uploadFile = async (req, res) => {
     // Always ensure temp file cleanup on failure
     if (tempFilePath && fs.existsSync(tempFilePath)) {
       await fs.promises.unlink(tempFilePath).catch(() => {});
+    }
+
+    // Log failure
+    if (req.user) {
+      recordActivity({
+        userId: req.user._id,
+        action: 'FILE_UPLOADED',
+        source: 'local',
+        resourceName: req.file?.originalname || 'unknown',
+        status: 'FAILURE',
+        metadata: { error: error.message }
+      });
     }
 
     let userMessage = 'Failed to process and chunk file with storage engine.';
@@ -108,4 +137,3 @@ const uploadFile = async (req, res) => {
 module.exports = {
   uploadFile
 };
-
