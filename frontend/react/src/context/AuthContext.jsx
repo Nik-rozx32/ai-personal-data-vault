@@ -5,92 +5,82 @@ const AuthContext = createContext(null);
 const STORAGE_KEY = 'datavault_auth_user';
 const TOKEN_KEY = 'datavault_jwt_token';
 
-// Default mock accounts for testing and Google login
-export const PRESET_GOOGLE_ACCOUNTS = [
-  {
-    id: 'google-user-1',
-    name: 'John Doe',
-    email: 'john.doe@gmail.com',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-    provider: 'google',
-    role: 'USER',
-    plan: 'Pro Vault (1 TB)',
-    storageUsed: '245.6 GB',
-    storageTotal: '1 TB'
-  },
-  {
-    id: 'google-user-2',
-    name: 'Sarah Jenkins',
-    email: 'sarah.jenkins@gmail.com',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
-    provider: 'google',
-    role: 'USER',
-    plan: 'Enterprise Vault (5 TB)',
-    storageUsed: '1.2 TB',
-    storageTotal: '5 TB'
-  },
-  {
-    id: 'google-user-3',
-    name: 'Alex Rivera',
-    email: 'alex.rivera.dev@gmail.com',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
-    provider: 'google',
-    role: 'USER',
-    plan: 'Pro Vault (1 TB)',
-    storageUsed: '412.0 GB',
-    storageTotal: '1 TB'
-  }
-];
-
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error('Failed to load auth user from storage', e);
-    }
-    return PRESET_GOOGLE_ACCOUNTS[0];
-  });
-
   const [token, setToken] = useState(() => {
     try {
-      return localStorage.getItem(TOKEN_KEY) || currentUser?.token || null;
+      return localStorage.getItem(TOKEN_KEY) || null;
     } catch (e) {
       return null;
     }
   });
 
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (currentUser) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
-      } catch (e) {
-        console.error('Failed to save auth user to storage', e);
-      }
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
     }
-  }, [currentUser]);
+  });
 
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Validate existing token with MongoDB backend on application mount
   useEffect(() => {
-    if (token) {
-      try {
-        localStorage.setItem(TOKEN_KEY, token);
-      } catch (e) {
-        console.error('Failed to save token to storage', e);
-      }
-    } else {
-      localStorage.removeItem(TOKEN_KEY);
-    }
-  }, [token]);
+    let isMounted = true;
 
-  // Real Email / Password Login with backend integration + mock fallback
-  const login = async (email, password, remember = true) => {
+    const verifyToken = async () => {
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+      if (!savedToken) {
+        if (isMounted) {
+          setCurrentUser(null);
+          setToken(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/users/me', {
+          headers: {
+            'Authorization': `Bearer ${savedToken}`
+          }
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          if (isMounted) {
+            setCurrentUser(userData);
+            setToken(savedToken);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
+          }
+        } else {
+          // Token expired or invalid
+          if (isMounted) {
+            localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem(TOKEN_KEY);
+            setCurrentUser(null);
+            setToken(null);
+          }
+        }
+      } catch (err) {
+        console.warn('[AuthContext] Backend verification unreachable:', err.message);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    verifyToken();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Real Login with MongoDB Backend
+  const login = async (email, password) => {
     setIsLoading(true);
 
     if (!email || !password) {
@@ -99,13 +89,12 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      // Attempt backend login
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: email.trim(), password })
       });
 
       const data = await response.json();
@@ -115,47 +104,24 @@ export const AuthProvider = ({ children }) => {
       }
 
       const authenticatedUser = {
-        ...data.user,
-        provider: 'email',
-        token: data.token,
-        plan: 'Personal Vault (500 GB)',
-        storageUsed: '14.2 GB',
-        storageTotal: '500 GB'
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        role: data.user.role
       };
 
       setCurrentUser(authenticatedUser);
       setToken(data.token);
-      setIsLoading(false);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(authenticatedUser));
+      localStorage.setItem(TOKEN_KEY, data.token);
+
       return authenticatedUser;
-    } catch (apiError) {
-      // If backend is offline or network error, fallback to simulated user for UI demo
-      if (apiError.message.includes('fetch') || apiError.message.includes('NetworkError') || apiError.message.includes('Failed to fetch')) {
-        console.warn('[Auth] Backend unreachable, logging in offline demo mode:', apiError.message);
-        const nameFromEmail = email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-        const mockUser = {
-          id: `user-${Date.now()}`,
-          name: nameFromEmail || 'Vault User',
-          email: email,
-          avatar: null,
-          provider: 'email',
-          role: 'USER',
-          token: 'demo-jwt-token-' + Date.now(),
-          plan: 'Pro Vault (1 TB)',
-          storageUsed: '184.2 GB',
-          storageTotal: '1 TB',
-          createdAt: new Date().toISOString()
-        };
-        setCurrentUser(mockUser);
-        setToken(mockUser.token);
-        setIsLoading(false);
-        return mockUser;
-      }
+    } finally {
       setIsLoading(false);
-      throw apiError;
     }
   };
 
-  // Real Register New User with backend integration
+  // Real Registration with MongoDB Backend
   const register = async (name, email, password) => {
     setIsLoading(true);
 
@@ -175,7 +141,11 @@ export const AuthProvider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ name, email, password })
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          password
+        })
       });
 
       const data = await response.json();
@@ -185,98 +155,78 @@ export const AuthProvider = ({ children }) => {
       }
 
       const newUser = {
-        ...data.user,
-        provider: 'email',
-        token: data.token,
-        plan: 'Personal Vault (500 GB)',
-        storageUsed: '0 GB',
-        storageTotal: '500 GB'
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        role: data.user.role
       };
 
       setCurrentUser(newUser);
       setToken(data.token);
-      setIsLoading(false);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
+      localStorage.setItem(TOKEN_KEY, data.token);
+
       return newUser;
-    } catch (apiError) {
-      if (apiError.message.includes('fetch') || apiError.message.includes('NetworkError') || apiError.message.includes('Failed to fetch')) {
-        console.warn('[Auth] Backend unreachable, creating offline demo user:', apiError.message);
-        const mockUser = {
-          id: `user-${Date.now()}`,
-          name: name,
-          email: email,
-          avatar: null,
-          provider: 'email',
-          role: 'USER',
-          token: 'demo-jwt-token-' + Date.now(),
-          plan: 'Pro Vault (1 TB)',
-          storageUsed: '0 GB',
-          storageTotal: '1 TB',
-          createdAt: new Date().toISOString()
-        };
-        setCurrentUser(mockUser);
-        setToken(mockUser.token);
-        setIsLoading(false);
-        return mockUser;
-      }
+    } finally {
       setIsLoading(false);
-      throw apiError;
     }
   };
 
-  // Google Login
-  const loginWithGoogle = async (googleAccount = null) => {
-    setIsLoading(true);
-    await new Promise((res) => setTimeout(res, 400));
+  // Logout & clear session
+  const logout = async () => {
+    const currentToken = token || localStorage.getItem(TOKEN_KEY);
+    if (currentToken) {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${currentToken}`
+          }
+        });
+      } catch (e) {
+        // Ignore network errors on logout
+      }
+    }
 
-    const selectedAccount = googleAccount || PRESET_GOOGLE_ACCOUNTS[0];
-    const userWithToken = {
-      ...selectedAccount,
-      token: selectedAccount.token || 'demo-google-jwt-token'
-    };
-    setCurrentUser(userWithToken);
-    setToken(userWithToken.token);
-    setIsLoading(false);
-    return userWithToken;
-  };
-
-  // GitHub Login
-  const loginWithGithub = async () => {
-    setIsLoading(true);
-    await new Promise((res) => setTimeout(res, 400));
-
-    const githubUser = {
-      id: `gh-${Date.now()}`,
-      name: 'Octo Dev',
-      email: 'dev@github.com',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
-      provider: 'github',
-      role: 'USER',
-      token: 'demo-github-jwt-token',
-      plan: 'Pro Vault (1 TB)',
-      storageUsed: '310.4 GB',
-      storageTotal: '1 TB'
-    };
-
-    setCurrentUser(githubUser);
-    setToken(githubUser.token);
-    setIsLoading(false);
-    return githubUser;
-  };
-
-  // Logout
-  const logout = () => {
     setCurrentUser(null);
     setToken(null);
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(TOKEN_KEY);
   };
 
-  // Reset Password simulation
-  const resetPassword = async (email) => {
-    setIsLoading(true);
-    await new Promise((res) => setTimeout(res, 500));
-    setIsLoading(false);
-    return true;
+  // Initiate real Google Drive OAuth flow
+  const connectGoogleDrive = async () => {
+    const currentToken = token || localStorage.getItem(TOKEN_KEY);
+    if (!currentToken) {
+      throw new Error('Please log in before connecting Google Drive.');
+    }
+
+    const response = await fetch('/api/integrations/google-drive/connect', {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      }
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.url) {
+      throw new Error(data.message || 'Failed to start Google Drive connection');
+    }
+
+    // Redirect to Google's consent screen
+    window.location.href = data.url;
+  };
+
+  // Authenticated fetch helper
+  const authFetch = (url, options = {}) => {
+    const currentToken = token || localStorage.getItem(TOKEN_KEY);
+    return fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {})
+      }
+    });
   };
 
   const value = {
@@ -286,10 +236,9 @@ export const AuthProvider = ({ children }) => {
     isLoading,
     login,
     register,
-    loginWithGoogle,
-    loginWithGithub,
     logout,
-    resetPassword
+    connectGoogleDrive,
+    authFetch
   };
 
   return (

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Plus, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Check, RefreshCw, Unlink } from 'lucide-react';
 import { 
   GoogleDriveIcon, 
   DropboxIcon, 
@@ -8,50 +8,102 @@ import {
   GmailIcon, 
   LocalStorageIcon 
 } from './BrandIcons';
+import { useAuth } from '../context/AuthContext';
 
 export const ConnectedSources = ({ onAddSource, onViewAll }) => {
+  const { authFetch, connectGoogleDrive } = useAuth();
+  const [gdriveStatus, setGdriveStatus] = useState({
+    connected: false,
+    providerAccountId: null,
+    loading: true
+  });
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  const fetchGDriveStatus = async () => {
+    try {
+      const res = await authFetch('/api/integrations/google-drive/status');
+      if (res.ok) {
+        const data = await res.json();
+        setGdriveStatus({
+          connected: data.connected,
+          providerAccountId: data.providerAccountId || null,
+          loading: false
+        });
+      } else {
+        setGdriveStatus({ connected: false, providerAccountId: null, loading: false });
+      }
+    } catch (err) {
+      setGdriveStatus({ connected: false, providerAccountId: null, loading: false });
+    }
+  };
+
+  useEffect(() => {
+    fetchGDriveStatus();
+  }, []);
+
+  const handleDisconnect = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm('Disconnect Google Drive from your account?')) return;
+    setIsDisconnecting(true);
+    try {
+      const res = await authFetch('/api/integrations/google-drive/disconnect', {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setGdriveStatus({ connected: false, providerAccountId: null, loading: false });
+      }
+    } catch (err) {
+      console.error('Error disconnecting Google Drive:', err);
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
   const sources = [
     {
       id: 'gdrive',
       name: 'Google Drive',
-      storage: '68.4 GB',
+      storage: gdriveStatus.connected
+        ? (gdriveStatus.providerAccountId || 'Connected')
+        : 'Not connected',
       icon: <GoogleDriveIcon size={26} />,
+      status: gdriveStatus.connected ? 'connected' : 'disconnected',
+      isGoogle: true
+    },
+    {
+      id: 'local',
+      name: 'Local Vault Storage',
+      storage: 'Connected',
+      icon: <LocalStorageIcon size={24} />,
       status: 'connected',
     },
     {
       id: 'dropbox',
       name: 'Dropbox',
-      storage: '45.2 GB',
+      storage: 'Not connected',
       icon: <DropboxIcon size={24} />,
-      status: 'connected',
+      status: 'disconnected',
     },
     {
       id: 'onedrive',
       name: 'OneDrive',
-      storage: '36.7 GB',
+      storage: 'Not connected',
       icon: <OneDriveIcon size={26} />,
-      status: 'connected',
+      status: 'disconnected',
     },
     {
       id: 'notion',
       name: 'Notion',
-      storage: '12.6 GB',
+      storage: 'Not connected',
       icon: <NotionIcon size={24} />,
-      status: 'connected',
+      status: 'disconnected',
     },
     {
       id: 'gmail',
       name: 'Gmail',
-      storage: '8.7 GB',
+      storage: 'Not connected',
       icon: <GmailIcon size={24} />,
-      status: 'connected',
-    },
-    {
-      id: 'local',
-      name: 'Local Storage',
-      storage: '51.0 GB',
-      icon: <LocalStorageIcon size={24} />,
-      status: 'connected',
+      status: 'disconnected',
     },
   ];
 
@@ -98,7 +150,7 @@ export const ConnectedSources = ({ onAddSource, onViewAll }) => {
         </button>
       </div>
 
-      {/* Grid of 6 Sources (3 cols x 2 rows) */}
+      {/* Grid of Sources */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
@@ -107,6 +159,13 @@ export const ConnectedSources = ({ onAddSource, onViewAll }) => {
         {sources.map((source) => (
           <div
             key={source.id}
+            onClick={() => {
+              if (source.isGoogle && !gdriveStatus.connected) {
+                connectGoogleDrive();
+              } else if (!source.isGoogle && source.status === 'disconnected') {
+                if (onAddSource) onAddSource();
+              }
+            }}
             style={{
               border: '1px solid var(--border-default)',
               borderRadius: '14px',
@@ -116,7 +175,8 @@ export const ConnectedSources = ({ onAddSource, onViewAll }) => {
               gap: '12px',
               backgroundColor: 'var(--bg-surface)',
               transition: 'all 0.2s ease',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              position: 'relative'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--primary-500)';
@@ -157,16 +217,47 @@ export const ConnectedSources = ({ onAddSource, onViewAll }) => {
                 alignItems: 'center',
                 gap: '5px'
               }}>
-                <span>{source.storage}</span>
+                <span style={{
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {source.storage}
+                </span>
                 <span style={{
                   display: 'inline-block',
                   width: '6px',
                   height: '6px',
                   borderRadius: '50%',
-                  backgroundColor: '#10b981'
+                  backgroundColor: source.status === 'connected' ? '#10b981' : '#94a3b8',
+                  flexShrink: 0
                 }} />
               </div>
             </div>
+
+            {/* Disconnect button for Google Drive if connected */}
+            {source.isGoogle && gdriveStatus.connected && (
+              <button
+                onClick={handleDisconnect}
+                disabled={isDisconnecting}
+                title="Disconnect Google Drive"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '4px',
+                  cursor: 'pointer',
+                  color: '#94a3b8',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+              >
+                <Unlink size={14} />
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -190,7 +281,8 @@ export const ConnectedSources = ({ onAddSource, onViewAll }) => {
             color: 'var(--primary-600)',
             backgroundColor: 'var(--primary-50)',
             border: '1px dashed var(--primary-200)',
-            transition: 'all 0.2s ease'
+            transition: 'all 0.2s ease',
+            cursor: 'pointer'
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.backgroundColor = 'var(--primary-100)';

@@ -169,7 +169,28 @@ const login = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Logout authenticated user and log activity
+ * @route   POST /api/auth/logout
+ * @access  Private
+ */
+const logout = async (req, res) => {
+  try {
+    if (req.user) {
+      recordActivity({
+        userId: req.user._id,
+        action: 'USER_LOGOUT',
+        source: 'system'
+      });
+    }
+    return res.status(200).json({ message: 'Logged out successfully' });
+  } catch (error) {
+    return res.status(200).json({ message: 'Logged out successfully' });
+  }
+};
+
 module.exports = {
   register,
-  login
+  login,
+  logout
 };

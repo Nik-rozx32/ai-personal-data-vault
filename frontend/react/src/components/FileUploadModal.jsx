@@ -163,27 +163,17 @@ export const FileUploadModal = ({ isOpen, onClose, onUploadSuccess }) => {
     }
 
     setStatus('uploading');
-    setStatusMessage('Uploading file to backend API...');
+    setStatusMessage('Uploading and recording document in MongoDB...');
     setErrorMsg('');
     setResultData(null);
 
     const formData = new FormData();
     formData.append('file', selectedFile);
-    formData.append('chunkSize', String(calculatedChunkSizeBytes));
-
-    // Staged progress state indicators for staff demonstration clarity
-    const timer1 = setTimeout(() => {
-      setStatusMessage('Invoking C++ Storage Engine binary...');
-    }, 450);
-
-    const timer2 = setTimeout(() => {
-      setStatusMessage('C++ Storage Engine splitting file into binary chunks...');
-    }, 900);
 
     try {
       const effectiveToken = token || currentUser?.token || localStorage.getItem('datavault_jwt_token');
 
-      const response = await fetch('/api/files/chunk', {
+      const response = await fetch('/api/files/upload', {
         method: 'POST',
         headers: {
           ...(effectiveToken ? { 'Authorization': `Bearer ${effectiveToken}` } : {})
@@ -191,17 +181,14 @@ export const FileUploadModal = ({ isOpen, onClose, onUploadSuccess }) => {
         body: formData
       });
 
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || data.error || 'Failed to upload and chunk file with storage engine.');
+        throw new Error(data.message || data.error || 'Failed to upload document to vault.');
       }
 
       setStatus('success');
-      setStatusMessage('C++ Storage Engine Chunking Completed!');
+      setStatusMessage('File Stored in Vault Database Successfully!');
       setResultData(data);
       setSelectedChunkIndex(0);
 
@@ -209,11 +196,9 @@ export const FileUploadModal = ({ isOpen, onClose, onUploadSuccess }) => {
         onUploadSuccess(data);
       }
     } catch (err) {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
       console.error('[Upload Error]:', err);
       setStatus('error');
-      setErrorMsg(err.message || 'An error occurred while executing the C++ storage engine.');
+      setErrorMsg(err.message || 'An error occurred while uploading the file.');
     }
   };
 

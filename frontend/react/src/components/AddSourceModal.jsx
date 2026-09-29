@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Check, Search, Plus, ExternalLink, ShieldCheck, RefreshCw } from 'lucide-react';
 import { 
   GoogleDriveIcon, 
@@ -9,36 +9,54 @@ import {
   LocalStorageIcon,
   GitHubIcon
 } from './BrandIcons';
+import { useAuth } from '../context/AuthContext';
 
 export const AddSourceModal = ({ isOpen, onClose, onSourceAdded }) => {
+  const { authFetch, connectGoogleDrive } = useAuth();
   const [connectingId, setConnectingId] = useState(null);
-  const [connectedIds, setConnectedIds] = useState(['gdrive', 'dropbox', 'onedrive', 'notion', 'gmail', 'local']);
+  const [isGDriveConnected, setIsGDriveConnected] = useState(false);
   const [filterQuery, setFilterQuery] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      authFetch('/api/integrations/google-drive/status')
+        .then(res => res.json())
+        .then(data => setIsGDriveConnected(data.connected || false))
+        .catch(() => setIsGDriveConnected(false));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const availableSources = [
-    { id: 'gdrive', name: 'Google Drive', category: 'Cloud Storage', icon: <GoogleDriveIcon size={28} /> },
-    { id: 'dropbox', name: 'Dropbox', category: 'Cloud Storage', icon: <DropboxIcon size={26} /> },
-    { id: 'onedrive', name: 'Microsoft OneDrive', category: 'Cloud Storage', icon: <OneDriveIcon size={28} /> },
-    { id: 'notion', name: 'Notion Workspace', category: 'Productivity', icon: <NotionIcon size={26} /> },
-    { id: 'gmail', name: 'Google Workspace / Gmail', category: 'Email & Communications', icon: <GmailIcon size={26} /> },
-    { id: 'local', name: 'Local Disk / NAS', category: 'Local Storage', icon: <LocalStorageIcon size={26} /> },
-    { id: 'github', name: 'GitHub Repositories', category: 'Developer', icon: <GitHubIcon size={26} /> },
-    { id: 's3', name: 'Amazon Web Services S3', category: 'Cloud Storage', icon: <span style={{ fontSize: '22px' }}>☁️</span> },
-    { id: 'box', name: 'Box Enterprise', category: 'Cloud Storage', icon: <span style={{ fontSize: '22px' }}>📦</span> },
-    { id: 'icloud', name: 'Apple iCloud Drive', category: 'Cloud Storage', icon: <span style={{ fontSize: '22px' }}>🍎</span> },
+    { id: 'gdrive', name: 'Google Drive', category: 'Cloud Storage', icon: <GoogleDriveIcon size={28} />, isLive: true },
+    { id: 'local', name: 'Local Disk / Storage', category: 'Local Storage', icon: <LocalStorageIcon size={26} />, isLive: true, connected: true },
+    { id: 'dropbox', name: 'Dropbox', category: 'Cloud Storage', icon: <DropboxIcon size={26} />, isLive: false },
+    { id: 'onedrive', name: 'Microsoft OneDrive', category: 'Cloud Storage', icon: <OneDriveIcon size={28} />, isLive: false },
+    { id: 'notion', name: 'Notion Workspace', category: 'Productivity', icon: <NotionIcon size={26} />, isLive: false },
+    { id: 'gmail', name: 'Google Workspace / Gmail', category: 'Email & Communications', icon: <GmailIcon size={26} />, isLive: false },
+    { id: 'github', name: 'GitHub Repositories', category: 'Developer', icon: <GitHubIcon size={26} />, isLive: false },
+    { id: 's3', name: 'Amazon Web Services S3', category: 'Cloud Storage', icon: <span style={{ fontSize: '22px' }}>☁️</span>, isLive: false },
+    { id: 'box', name: 'Box Enterprise', category: 'Cloud Storage', icon: <span style={{ fontSize: '22px' }}>📦</span>, isLive: false },
+    { id: 'icloud', name: 'Apple iCloud Drive', category: 'Cloud Storage', icon: <span style={{ fontSize: '22px' }}>🍎</span>, isLive: false },
   ];
 
-  const handleConnect = (source) => {
-    if (connectedIds.includes(source.id)) return;
-
-    setConnectingId(source.id);
-    setTimeout(() => {
-      setConnectedIds([...connectedIds, source.id]);
-      setConnectingId(null);
-      if (onSourceAdded) onSourceAdded(source);
-    }, 1200);
+  const handleConnect = async (source) => {
+    setErrorMsg('');
+    if (source.id === 'gdrive') {
+      try {
+        setConnectingId('gdrive');
+        await connectGoogleDrive();
+      } catch (err) {
+        setConnectingId(null);
+        setErrorMsg(err.message || 'Failed to start Google Drive authorization');
+      }
+    } else if (source.id === 'local') {
+      onClose();
+    } else {
+      setErrorMsg(`${source.name} integration is scheduled for upcoming phase.`);
+    }
   };
 
   const filtered = availableSources.filter(s => 
@@ -65,7 +83,7 @@ export const AddSourceModal = ({ isOpen, onClose, onSourceAdded }) => {
               Connect Data Source
             </h2>
             <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-              Connect cloud storage, mail, or local folders to index with DataVault AI.
+              Connect cloud storage or local files to your secure personal vault.
             </p>
           </div>
           <button
@@ -86,6 +104,20 @@ export const AddSourceModal = ({ isOpen, onClose, onSourceAdded }) => {
           </button>
         </div>
 
+        {errorMsg && (
+          <div style={{
+            padding: '10px 14px',
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#dc2626',
+            borderRadius: '8px',
+            fontSize: '12.5px',
+            marginBottom: '14px'
+          }}>
+            {errorMsg}
+          </div>
+        )}
+
         {/* Search */}
         <div style={{
           display: 'flex',
@@ -100,7 +132,7 @@ export const AddSourceModal = ({ isOpen, onClose, onSourceAdded }) => {
           <Search size={16} style={{ color: 'var(--text-muted)' }} />
           <input
             type="text"
-            placeholder="Filter sources (e.g. Google Drive, AWS, Notion)..."
+            placeholder="Filter sources (e.g. Google Drive, Notion)..."
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             style={{
@@ -122,7 +154,7 @@ export const AddSourceModal = ({ isOpen, onClose, onSourceAdded }) => {
           paddingRight: '4px'
         }}>
           {filtered.map((source) => {
-            const isConnected = connectedIds.includes(source.id);
+            const isConnected = source.id === 'gdrive' ? isGDriveConnected : Boolean(source.connected);
             const isConnecting = connectingId === source.id;
 
             return (
@@ -146,7 +178,7 @@ export const AddSourceModal = ({ isOpen, onClose, onSourceAdded }) => {
                       {source.name}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {source.category}
+                      {source.category} {!source.isLive && source.id !== 'local' && '• Coming Soon'}
                     </div>
                   </div>
                 </div>
@@ -179,7 +211,8 @@ export const AddSourceModal = ({ isOpen, onClose, onSourceAdded }) => {
                         color: '#ffffff',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px'
+                        gap: '6px',
+                        cursor: 'pointer'
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4338ca'}
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4f46e5'}
@@ -211,7 +244,7 @@ export const AddSourceModal = ({ isOpen, onClose, onSourceAdded }) => {
           color: 'var(--text-secondary)'
         }}>
           <ShieldCheck size={16} style={{ color: '#10b981' }} />
-          <span>All connections are encrypted with 256-bit AES end-to-end encryption.</span>
+          <span>All connections are encrypted with 256-bit AES encryption.</span>
         </div>
       </div>
     </div>

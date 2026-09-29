@@ -13,22 +13,22 @@ const PORT = process.env.PORT || 5000;
  */
 const startServer = async () => {
   try {
-    // Connect to MongoDB
+    // Attempt MongoDB connection
     await connectDB();
-
-    // Start HTTP Server
-    app.listen(PORT, () => {
-      console.log('==================================================');
-      console.log(' AI Personal Data Vault - Backend API');
-      console.log(` Status       : Running`);
-      console.log(` Port         : ${PORT}`);
-      console.log(` Health Check : http://localhost:${PORT}/`);
-      console.log('==================================================');
-    });
   } catch (err) {
-    console.error(`[Server] Initialization failed: ${err.message}`);
-    process.exit(1);
+    console.warn(`[Server] Notice: MongoDB initial connection failed (${err.message}).`);
+    console.warn(`[Server] Starting server. Database operations will require active MongoDB connection.`);
   }
+
+  // Start HTTP Server
+  app.listen(PORT, () => {
+    console.log('==================================================');
+    console.log(' AI Personal Data Vault - Backend API');
+    console.log(` Status       : Running`);
+    console.log(` Port         : ${PORT}`);
+    console.log(` Health Check : http://localhost:${PORT}/`);
+    console.log('==================================================');
+  });
 };
 
 startServer();

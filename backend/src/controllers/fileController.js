@@ -1,113 +1,130 @@
 const fs = require('fs');
-const path = require('path');
-const { splitFileWithEngine } = require('../services/storageEngineService');
+const Document = require('../models/Document');
 const { recordActivity } = require('../services/activityService');
-
-// Base directory for chunks output
-const CHUNKS_BASE_DIR =
-  process.env.CHUNKS_OUTPUT_DIR ||
-  path.resolve(__dirname, '../../../chunks_output');
+const { extractText } = require('../services/documentExtractionService');
 
 /**
- * @desc    Upload a file and split it into chunks using the C++ storage engine
- * @route   POST /api/files/chunk, POST /api/files/upload
- * @access  Private (JWT required — userId from token, never from body)
+ * @desc    Get all files/documents for the authenticated user
+ * @route   GET /api/files
+ * @access  Private (JWT required)
+ */
+const listFiles = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const documents = await Document.find({ userId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formattedFiles = documents.map((doc) => ({
+      id: doc._id.toString(),
+      name: doc.name,
+      mimeType: doc.mimeType,
+      sizeBytes: doc.sizeBytes,
+      source: doc.source,
+      sourceDocumentId: doc.sourceDocumentId,
+      url: doc.url,
+      createdAt: doc.createdAt,
+      sourceModifiedAt: doc.sourceModifiedAt || doc.updatedAt
+    }));
+
+    return res.status(200).json({ files: formattedFiles });
+  } catch (error) {
+    console.error('[File Controller - listFiles Error]:', error);
+    return res.status(500).json({ message: 'Server error retrieving files' });
+  }
+};
+
+/**
+ * @desc    Upload a file and store document metadata in MongoDB
+ * @route   POST /api/files/upload, POST /api/files/chunk
+ * @access  Private (JWT required)
  */
 const uploadFile = async (req, res) => {
   let tempFilePath = null;
 
   try {
-    // 1. Verify file was provided by multer
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: 'No file selected. Please choose a file to upload and chunk.'
+        message: 'No file selected. Please select a file to upload.'
       });
     }
 
-    // User ID comes from the JWT via protect middleware — never from request body
     const userId = req.user._id;
-
     tempFilePath = req.file.path;
     const originalFileName = req.file.originalname;
     const fileSize = req.file.size;
+    const mimeType = req.file.mimetype || 'application/octet-stream';
 
-    // 2. Determine chunk size (default: 1 MB = 1,048,576 bytes)
-    let chunkSize = 1048576;
-    if (req.body.chunkSize) {
-      const parsedSize = parseInt(req.body.chunkSize, 10);
-      if (isNaN(parsedSize) || parsedSize <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid chunk size. Chunk size must be a positive integer in bytes.'
-        });
-      }
-      chunkSize = parsedSize;
+    // Attempt text extraction for searchable text/PDF files
+    let content = '';
+    let textExtracted = false;
+    try {
+      const fileBuffer = await fs.promises.readFile(tempFilePath);
+      content = await extractText(fileBuffer, mimeType);
+      textExtracted = Boolean(content && content.trim().length > 0);
+    } catch (extractErr) {
+      console.warn('[File Controller] Text extraction skipped:', extractErr.message);
     }
 
-    // 3. Define target chunk directory scoped to this user + file
-    const safeBaseName = path
-      .basename(originalFileName, path.extname(originalFileName))
-      .replace(/[^a-zA-Z0-9_-]/g, '_');
-    const folderName = `vault_${userId}_${Date.now()}_${safeBaseName}`;
-    const targetChunkDir = path.join(CHUNKS_BASE_DIR, folderName);
+    // Save document metadata in MongoDB
+    const document = await Document.create({
+      userId,
+      source: 'local',
+      sourceDocumentId: req.file.filename || `${Date.now()}_${originalFileName}`,
+      name: originalFileName,
+      mimeType,
+      sizeBytes: fileSize,
+      content: content || '',
+      textExtracted,
+      sourceCreatedAt: new Date(),
+      sourceModifiedAt: new Date()
+    });
 
-    // 4. Call C++ Storage Engine
-    const { chunkCount, outputDirectory, chunks, engineStdout } = await splitFileWithEngine(
-      tempFilePath,
-      targetChunkDir,
-      chunkSize
-    );
-
-    // 5. Clean up temporary uploaded file after successful chunking
-    if (fs.existsSync(tempFilePath)) {
+    // Clean up temporary staging file
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
       await fs.promises.unlink(tempFilePath).catch((e) =>
         console.warn('[Upload] Temp file cleanup warning:', e.message)
       );
       tempFilePath = null;
     }
 
-    // 6. Log FILE_UPLOADED activity (userId from JWT)
+    // Record activity in MongoDB
     recordActivity({
       userId,
       action: 'FILE_UPLOADED',
       source: 'local',
+      resourceId: document._id.toString(),
       resourceName: originalFileName,
       status: 'SUCCESS',
       metadata: {
         fileSize,
-        chunkCount,
-        chunkSize
+        mimeType,
+        textExtracted
       }
     });
 
-    // 7. Return comprehensive structured response (no filesystem paths exposed)
     return res.status(200).json({
       success: true,
+      message: 'File successfully uploaded and stored in vault',
       fileName: originalFileName,
       fileSize: fileSize,
-      originalSize: fileSize,
-      chunkSize: chunkSize,
-      chunkCount: chunkCount,
-      chunks: chunks.map((c) => ({
-        index: c.index,
-        fileName: c.fileName || c.name,
-        name: c.name || c.fileName,
-        size: c.size,
-        status: c.status || 'Created'
-        // Note: c.path intentionally omitted from response to avoid exposing server paths
-      })),
-      engineStdout: engineStdout
+      document: {
+        id: document._id,
+        name: document.name,
+        mimeType: document.mimeType,
+        sizeBytes: document.sizeBytes,
+        source: document.source,
+        createdAt: document.createdAt
+      }
     });
   } catch (error) {
     console.error('[Upload Controller Error]:', error.message);
 
-    // Always ensure temp file cleanup on failure
     if (tempFilePath && fs.existsSync(tempFilePath)) {
       await fs.promises.unlink(tempFilePath).catch(() => {});
     }
 
-    // Log failure
     if (req.user) {
       recordActivity({
         userId: req.user._id,
@@ -119,21 +136,51 @@ const uploadFile = async (req, res) => {
       });
     }
 
-    let userMessage = 'Failed to process and chunk file with storage engine.';
-    if (error.message.includes('executable not found') || error.message.includes('Storage engine could not be executed')) {
-      userMessage = 'Storage engine could not be executed. Please verify that the C++ storage engine is built.';
-    } else if (error.message.includes('Input file does not exist')) {
-      userMessage = 'Uploaded temporary file could not be read.';
-    }
-
     return res.status(500).json({
       success: false,
-      message: userMessage,
+      message: 'Failed to process and store file',
       error: error.message
     });
   }
 };
 
+/**
+ * @desc    Delete a document owned by the user
+ * @route   DELETE /api/files/:id
+ * @access  Private (JWT required)
+ */
+const deleteFile = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const document = await Document.findOneAndDelete({
+      _id: req.params.id,
+      userId
+    });
+
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found or access denied' });
+    }
+
+    recordActivity({
+      userId,
+      action: 'DOCUMENT_DELETED',
+      source: document.source,
+      resourceId: document._id.toString(),
+      resourceName: document.name
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Document deleted successfully'
+    });
+  } catch (error) {
+    console.error('[File Controller - deleteFile Error]:', error);
+    return res.status(500).json({ message: 'Server error deleting document' });
+  }
+};
+
 module.exports = {
-  uploadFile
+  listFiles,
+  uploadFile,
+  deleteFile
 };

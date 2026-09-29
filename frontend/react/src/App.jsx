@@ -23,6 +23,20 @@ function MainVaultApp() {
   const [isOptimizerOpen, setIsOptimizerOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [toastMessage, setToastMessage] = useState(null);
+
+  // Check URL parameters for OAuth callbacks
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('gdrive_connected') === 'true') {
+      setToastMessage({ type: 'success', text: 'Google Drive connected successfully to your vault!' });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('gdrive_error')) {
+      const err = params.get('gdrive_error');
+      setToastMessage({ type: 'error', text: `Google Drive connection: ${err}` });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   // Handle Theme Switch
   const toggleTheme = () => {
@@ -101,6 +115,37 @@ function MainVaultApp() {
           width: '100%',
           margin: '0 auto'
         }}>
+          {toastMessage && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 16px',
+              borderRadius: '12px',
+              backgroundColor: toastMessage.type === 'success' ? '#ecfdf5' : '#fef2f2',
+              border: `1px solid ${toastMessage.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
+              color: toastMessage.type === 'success' ? '#065f46' : '#991b1b',
+              marginBottom: '20px',
+              fontSize: '13.5px',
+              fontWeight: '500'
+            }}>
+              <span>{toastMessage.text}</span>
+              <button
+                onClick={() => setToastMessage(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'inherit',
+                  fontWeight: '700',
+                  fontSize: '14px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {activeNav === 'Dashboard' ? (
             <>
               {/* Dashboard Title & CTA Bar */}
@@ -159,7 +204,7 @@ function MainVaultApp() {
                     }}
                   >
                     <Upload size={16} strokeWidth={2.5} />
-                    <span>Upload & Chunk</span>
+                    <span>Upload Document</span>
                   </button>
 
                   <button

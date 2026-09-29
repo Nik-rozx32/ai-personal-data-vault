@@ -26,9 +26,16 @@ const initiateOAuth = (req, res) => {
     const stateParam = Buffer.from(JSON.stringify({ userId })).toString('base64url');
     const authUrlWithState = authUrl + `&state=${stateParam}`;
 
+    if (req.headers.accept && req.headers.accept.includes('application/json')) {
+      return res.status(200).json({ url: authUrlWithState });
+    }
+
     return res.redirect(authUrlWithState);
   } catch (error) {
     console.error('[GoogleDrive] initiateOAuth error:', error.message);
+    if (req.headers.accept && req.headers.accept.includes('application/json')) {
+      return res.status(500).json({ message: error.message });
+    }
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     return res.redirect(`${frontendUrl}?gdrive_error=oauth_config_missing`);
   }
@@ -187,6 +194,29 @@ const listFiles = async (req, res) => {
     const pageToken = req.query.pageToken || undefined;
 
     const { files, nextPageToken } = await googleDrive.listFiles(userId, { pageSize, pageToken });
+
+    // Store necessary document metadata in MongoDB (without downloading file binaries)
+    if (files && files.length > 0) {
+      Promise.all(
+        files.map((file) =>
+          Document.findOneAndUpdate(
+            { userId: req.user._id, source: 'google_drive', sourceDocumentId: file.id },
+            {
+              userId: req.user._id,
+              source: 'google_drive',
+              sourceDocumentId: file.id,
+              name: file.name,
+              mimeType: file.mimeType,
+              url: file.webViewLink,
+              sizeBytes: file.size ? parseInt(file.size, 10) : null,
+              sourceCreatedAt: file.createdTime ? new Date(file.createdTime) : null,
+              sourceModifiedAt: file.modifiedTime ? new Date(file.modifiedTime) : null
+            },
+            { upsert: true }
+          ).catch((e) => console.warn('[GoogleDrive] Metadata sync error:', e.message))
+        )
+      ).catch(() => {});
+    }
 
     return res.status(200).json({ files, nextPageToken: nextPageToken || null });
   } catch (error) {

@@ -1,13 +1,41 @@
-import React from 'react';
-import { FileText, Database, Cpu, ShieldAlert, Sparkles, HardDrive } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FileText, Database, Layers, Activity } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+
+const formatBytes = (bytes) => {
+  if (!bytes || bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
 
 export const StatCards = ({ onOpenOptimizer }) => {
-  const stats = [
+  const { authFetch } = useAuth();
+  const [stats, setStats] = useState({
+    totalFiles: 0,
+    totalStorageBytes: 0,
+    connectedAccountsCount: 0,
+    recentActivityCount: 0
+  });
+
+  useEffect(() => {
+    authFetch('/api/users/stats')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data.totalFiles === 'number') {
+          setStats(data);
+        }
+      })
+      .catch(err => console.warn('[StatCards] Stats fetch error:', err.message));
+  }, []);
+
+  const cardItems = [
     {
       id: 'total-files',
       title: 'Total Files',
-      value: '12,458',
-      subtitle: 'Across all sources',
+      value: stats.totalFiles.toLocaleString(),
+      subtitle: 'Stored in vault database',
       subtitleColor: 'var(--text-secondary)',
       icon: (
         <div style={{
@@ -27,9 +55,9 @@ export const StatCards = ({ onOpenOptimizer }) => {
     },
     {
       id: 'total-storage',
-      title: 'Total Storage',
-      value: '245.6 GB',
-      subtitle: 'of 1 TB used',
+      title: 'Vault Storage',
+      value: formatBytes(stats.totalStorageBytes),
+      subtitle: 'Real document data',
       subtitleColor: '#10b981',
       icon: (
         <div style={{
@@ -48,10 +76,10 @@ export const StatCards = ({ onOpenOptimizer }) => {
       )
     },
     {
-      id: 'ai-summaries',
-      title: 'AI Summaries',
-      value: '1,234',
-      subtitle: 'Generated',
+      id: 'connected-sources',
+      title: 'Active Sources',
+      value: `${stats.connectedAccountsCount}`,
+      subtitle: stats.connectedAccountsCount > 0 ? 'Connected & synced' : 'Connect Google Drive',
       subtitleColor: '#f59e0b',
       icon: (
         <div style={{
@@ -65,18 +93,16 @@ export const StatCards = ({ onOpenOptimizer }) => {
           color: '#f59e0b',
           flexShrink: 0
         }}>
-          <Cpu size={24} strokeWidth={2} />
+          <Layers size={24} strokeWidth={2} />
         </div>
       )
     },
     {
-      id: 'duplicates-found',
-      title: 'Duplicates Found',
-      value: '342',
-      subtitle: 'Save 12.4 GB',
+      id: 'activity-events',
+      title: 'Vault Events',
+      value: stats.recentActivityCount.toLocaleString(),
+      subtitle: 'MongoDB audit trail',
       subtitleColor: '#3b82f6',
-      isClickable: true,
-      onClick: onOpenOptimizer,
       icon: (
         <div style={{
           width: '46px',
@@ -89,7 +115,7 @@ export const StatCards = ({ onOpenOptimizer }) => {
           color: '#3b82f6',
           flexShrink: 0
         }}>
-          <ShieldAlert size={24} strokeWidth={2} />
+          <Activity size={24} strokeWidth={2} />
         </div>
       )
     }
@@ -102,10 +128,9 @@ export const StatCards = ({ onOpenOptimizer }) => {
       gap: '18px',
       marginBottom: '28px'
     }}>
-      {stats.map((stat) => (
+      {cardItems.map((stat) => (
         <div
           key={stat.id}
-          onClick={stat.onClick}
           style={{
             backgroundColor: 'var(--bg-surface)',
             border: '1px solid var(--border-default)',
@@ -115,22 +140,15 @@ export const StatCards = ({ onOpenOptimizer }) => {
             alignItems: 'center',
             gap: '16px',
             boxShadow: 'var(--shadow-sm)',
-            cursor: stat.isClickable ? 'pointer' : 'default',
             transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease'
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'translateY(-2px)';
             e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-            if (stat.isClickable) {
-              e.currentTarget.style.borderColor = 'var(--primary-500)';
-            }
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateY(0)';
             e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-            if (stat.isClickable) {
-              e.currentTarget.style.borderColor = 'var(--border-default)';
-            }
           }}
         >
           {stat.icon}

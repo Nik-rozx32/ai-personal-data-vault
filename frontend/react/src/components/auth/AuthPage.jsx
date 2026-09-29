@@ -23,7 +23,6 @@ import {
   Layers
 } from 'lucide-react';
 import { DataVaultShieldLogo, GoogleIcon, GitHubIcon } from '../BrandIcons';
-import { GoogleAuthModal } from './GoogleAuthModal';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
 import { useAuth } from '../../context/AuthContext';
 
@@ -34,7 +33,7 @@ export const AuthPage = ({
   theme = 'light',
   toggleTheme
 }) => {
-  const { login, register, loginWithGoogle, loginWithGithub, isLoading } = useAuth();
+  const { login, register, isLoading } = useAuth();
 
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [name, setName] = useState('');
@@ -47,7 +46,6 @@ export const AuthPage = ({
   
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
 
   // Password strength calculation
@@ -107,31 +105,11 @@ export const AuthPage = ({
           return;
         }
         await register(name, email, password);
-        setSuccessMsg('Account created successfully! Initializing your vault...');
+        setSuccessMsg('Account created successfully! Welcome to your personal vault.');
         if (onSuccess) onSuccess();
       }
     } catch (err) {
       setErrorMsg(err.message || 'Authentication failed. Please check your details.');
-    }
-  };
-
-  const handleGoogleSuccess = (googleAccount) => {
-    loginWithGoogle(googleAccount);
-    setIsGoogleModalOpen(false);
-    setSuccessMsg(`Welcome, ${googleAccount.name}! Connected via Google.`);
-    if (onSuccess) onSuccess();
-  };
-
-  const handleDemoLogin = async () => {
-    setEmail('john.doe@gmail.com');
-    setPassword('vaultMaster2026!');
-    setErrorMsg('');
-    try {
-      await login('john.doe@gmail.com', 'vaultMaster2026!', true);
-      setSuccessMsg('Logged in with Demo Vault Account!');
-      if (onSuccess) onSuccess();
-    } catch (err) {
-      setErrorMsg(err.message);
     }
   };
 
@@ -547,117 +525,23 @@ export const AuthPage = ({
             </div>
           )}
 
-          {/* Social Auth Providers (Google 1-Click + GitHub) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-            {/* Primary Google Login Button */}
-            <button
-              type="button"
-              onClick={() => setIsGoogleModalOpen(true)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-                padding: '11px 16px',
-                borderRadius: '12px',
-                backgroundColor: 'var(--bg-surface)',
-                border: '1.5px solid var(--border-default)',
-                color: 'var(--text-primary)',
-                fontSize: '13.5px',
-                fontWeight: '600',
-                boxShadow: 'var(--shadow-sm)',
-                transition: 'all 0.18s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = '#4285f4';
-                e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-default)';
-                e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <GoogleIcon size={19} />
-              <span>{mode === 'login' ? 'Continue with Google' : 'Sign up with Google'}</span>
-            </button>
-
-            {/* GitHub & Quick Demo Option */}
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={loginWithGithub}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  padding: '9px 12px',
-                  borderRadius: '10px',
-                  backgroundColor: 'var(--bg-primary)',
-                  border: '1px solid var(--border-default)',
-                  color: 'var(--text-primary)',
-                  fontSize: '12.5px',
-                  fontWeight: '600'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)';
-                  e.currentTarget.style.borderColor = 'var(--border-hover)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-primary)';
-                  e.currentTarget.style.borderColor = 'var(--border-default)';
-                }}
-              >
-                <GitHubIcon size={16} />
-                <span>GitHub</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  padding: '9px 12px',
-                  borderRadius: '10px',
-                  backgroundColor: 'rgba(79, 70, 229, 0.08)',
-                  border: '1px solid rgba(99, 102, 241, 0.25)',
-                  color: '#6366f1',
-                  fontSize: '12.5px',
-                  fontWeight: '600'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.15)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.08)';
-                }}
-              >
-                <Zap size={14} />
-                <span>1-Click Demo</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Divider */}
+          {/* Security Banner */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
-            margin: '20px 0'
+            gap: '10px',
+            padding: '12px 14px',
+            borderRadius: '12px',
+            backgroundColor: 'var(--bg-primary)',
+            border: '1px solid var(--border-default)',
+            marginBottom: '20px',
+            fontSize: '12.5px',
+            color: 'var(--text-secondary)'
           }}>
-            <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-subtle)' }} />
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              or with email
+            <ShieldCheck size={18} style={{ color: '#10b981', flexShrink: 0 }} />
+            <span>
+              Real database authentication backed by MongoDB with bcrypt password hashing and JWT sessions.
             </span>
-            <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-subtle)' }} />
           </div>
 
           {/* Authentication Form */}
@@ -1036,12 +920,7 @@ export const AuthPage = ({
         </div>
       </div>
 
-      {/* Google OAuth Simulation Modal */}
-      <GoogleAuthModal
-        isOpen={isGoogleModalOpen}
-        onClose={() => setIsGoogleModalOpen(false)}
-        onSelectAccount={handleGoogleSuccess}
-      />
+
 
       {/* Forgot Password Recovery Modal */}
       <ForgotPasswordModal
